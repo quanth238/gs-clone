@@ -285,7 +285,8 @@ renderCUDA(
 	const float* __restrict__ bg_color,
 	float* __restrict__ out_color,
 	const float* __restrict__ depths,
-	float* __restrict__ invdepth)
+	float* __restrict__ invdepth,
+	float* __restrict__ instance_mass)
 {
 	// Identify current tile and associated min/max pixel range.
 	auto block = cg::this_thread_block();
@@ -308,6 +309,7 @@ renderCUDA(
 
 	// Allocate storage for batches of collectively fetched data.
 	__shared__ int collected_id[BLOCK_SIZE];
+	__shared__ uint32_t collected_instance_idx[BLOCK_SIZE];
 	__shared__ float2 collected_xy[BLOCK_SIZE];
 	__shared__ float4 collected_conic_opacity[BLOCK_SIZE];
 
@@ -333,6 +335,7 @@ renderCUDA(
 		{
 			int coll_id = point_list[range.x + progress];
 			collected_id[block.thread_rank()] = coll_id;
+			collected_instance_idx[block.thread_rank()] = range.x + progress;
 			collected_xy[block.thread_rank()] = points_xy_image[coll_id];
 			collected_conic_opacity[block.thread_rank()] = conic_opacity[coll_id];
 		}
@@ -374,6 +377,9 @@ renderCUDA(
 			if(invdepth)
 			expected_invdepth += (1 / depths[collected_id[j]]) * alpha * T;
 
+			if (instance_mass)
+				atomicAdd(instance_mass + collected_instance_idx[j], alpha * T);
+
 			T = test_T;
 
 			// Keep track of last range entry to update this
@@ -409,7 +415,8 @@ void FORWARD::render(
 	const float* bg_color,
 	float* out_color,
 	float* depths,
-	float* depth)
+	float* depth,
+	float* instance_mass)
 {
 	renderCUDA<NUM_CHANNELS> << <grid, block >> > (
 		ranges,
@@ -423,7 +430,8 @@ void FORWARD::render(
 		bg_color,
 		out_color,
 		depths, 
-		depth);
+		depth,
+		instance_mass);
 }
 
 void FORWARD::preprocess(int P, int D, int M,
