@@ -209,7 +209,7 @@ class _RasterizeGaussiansWithStats(torch.autograd.Function):
         return color, radii, invdepths, point_list, ranges, instance_mass
 
     @staticmethod
-    def backward(ctx, grad_out_color, _, grad_out_depth, *_):
+    def backward(ctx, grad_out_color, grad_out_radii, grad_out_depth, *unused):
 
         num_rendered = ctx.num_rendered
         raster_settings = ctx.raster_settings
