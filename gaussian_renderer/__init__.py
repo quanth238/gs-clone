@@ -14,10 +14,20 @@ import sys
 import torch
 import math
 
-_local_rasterizer_path = os.path.join(os.path.dirname(__file__), os.pardir, "submodules", "diff-gaussian-rasterization")
-_local_rasterizer_path = os.path.abspath(_local_rasterizer_path)
-if _local_rasterizer_path not in sys.path:
-    sys.path.insert(0, _local_rasterizer_path)
+_local_rasterizer_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir, "submodules", "diff-gaussian-rasterization"))
+_local_rasterizer_pkg = os.path.join(_local_rasterizer_root, "diff_gaussian_rasterization")
+_local_has_extension = False
+if os.path.isdir(_local_rasterizer_pkg):
+    for ext in (".so", ".pyd", ".dylib"):
+        for name in os.listdir(_local_rasterizer_pkg):
+            if name.startswith("_C") and name.endswith(ext):
+                _local_has_extension = True
+                break
+        if _local_has_extension:
+            break
+
+if _local_has_extension and _local_rasterizer_root not in sys.path:
+    sys.path.insert(0, _local_rasterizer_root)
 
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer, GaussianRasterizerWithStats
 from scene.gaussian_model import GaussianModel
