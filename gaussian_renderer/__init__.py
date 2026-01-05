@@ -9,8 +9,16 @@
 # For inquiries contact  george.drettakis@inria.fr
 #
 
+import os
+import sys
 import torch
 import math
+
+_local_rasterizer_path = os.path.join(os.path.dirname(__file__), os.pardir, "submodules", "diff-gaussian-rasterization")
+_local_rasterizer_path = os.path.abspath(_local_rasterizer_path)
+if _local_rasterizer_path not in sys.path:
+    sys.path.insert(0, _local_rasterizer_path)
+
 from diff_gaussian_rasterization import GaussianRasterizationSettings, GaussianRasterizer, GaussianRasterizerWithStats
 from scene.gaussian_model import GaussianModel
 from utils.sh_utils import eval_sh
