@@ -123,6 +123,117 @@ RasterizeGaussiansCUDA(
   return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, out_invdepth);
 }
 
+std::tuple<int, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+RasterizeGaussiansCUDAWithStats(
+	const torch::Tensor& background,
+	const torch::Tensor& means3D,
+	const torch::Tensor& colors,
+	const torch::Tensor& opacity,
+	const torch::Tensor& scales,
+	const torch::Tensor& rotations,
+	const float scale_modifier,
+	const torch::Tensor& cov3D_precomp,
+	const torch::Tensor& viewmatrix,
+	const torch::Tensor& projmatrix,
+	const float tan_fovx,
+	const float tan_fovy,
+	const int image_height,
+	const int image_width,
+	const torch::Tensor& sh,
+	const int degree,
+	const torch::Tensor& campos,
+	const bool prefiltered,
+	const bool antialiasing,
+	const bool debug)
+{
+  if (means3D.ndimension() != 2 || means3D.size(1) != 3) {
+    AT_ERROR("means3D must have dimensions (num_points, 3)");
+  }
+
+  const int P = means3D.size(0);
+  const int H = image_height;
+  const int W = image_width;
+
+  auto int_opts = means3D.options().dtype(torch::kInt32);
+  auto float_opts = means3D.options().dtype(torch::kFloat32);
+
+  torch::Tensor out_color = torch::full({NUM_CHANNELS, H, W}, 0.0, float_opts);
+  torch::Tensor out_invdepth = torch::full({1, H, W}, 0.0, float_opts).contiguous();
+  float* out_invdepthptr = out_invdepth.data<float>();
+
+  torch::Tensor radii = torch::full({P}, 0, means3D.options().dtype(torch::kInt32));
+
+  torch::Device device(torch::kCUDA);
+  torch::TensorOptions options(torch::kByte);
+  torch::Tensor geomBuffer = torch::empty({0}, options.device(device));
+  torch::Tensor binningBuffer = torch::empty({0}, options.device(device));
+  torch::Tensor imgBuffer = torch::empty({0}, options.device(device));
+  std::function<char*(size_t)> geomFunc = resizeFunctional(geomBuffer);
+  std::function<char*(size_t)> binningFunc = resizeFunctional(binningBuffer);
+  std::function<char*(size_t)> imgFunc = resizeFunctional(imgBuffer);
+
+  int rendered = 0;
+  torch::Tensor point_list = torch::empty({0}, int_opts);
+  torch::Tensor ranges = torch::empty({0, 2}, int_opts);
+  torch::Tensor instance_mass = torch::empty({0}, float_opts);
+
+  if(P != 0)
+  {
+	  int M = 0;
+	  if(sh.size(0) != 0)
+	  {
+		M = sh.size(1);
+      }
+
+	  uint32_t* point_list_ptr = nullptr;
+	  uint2* ranges_ptr = nullptr;
+	  float* instance_mass_ptr = nullptr;
+	  int num_tiles = 0;
+
+	  rendered = CudaRasterizer::Rasterizer::forward_with_stats(
+	    geomFunc,
+		binningFunc,
+		imgFunc,
+	    P, degree, M,
+		background.contiguous().data<float>(),
+		W, H,
+		means3D.contiguous().data<float>(),
+		sh.contiguous().data_ptr<float>(),
+		colors.contiguous().data<float>(),
+		opacity.contiguous().data<float>(),
+		scales.contiguous().data_ptr<float>(),
+		scale_modifier,
+		rotations.contiguous().data_ptr<float>(),
+		cov3D_precomp.contiguous().data<float>(),
+		viewmatrix.contiguous().data<float>(),
+		projmatrix.contiguous().data<float>(),
+		campos.contiguous().data<float>(),
+		tan_fovx,
+		tan_fovy,
+		prefiltered,
+		out_color.contiguous().data<float>(),
+		out_invdepthptr,
+		antialiasing,
+		&point_list_ptr,
+		&ranges_ptr,
+		&instance_mass_ptr,
+		&num_tiles,
+		radii.contiguous().data<int>(),
+		debug);
+
+	  if (rendered > 0 && num_tiles > 0)
+	  {
+		point_list = torch::empty({rendered}, int_opts);
+		instance_mass = torch::empty({rendered}, float_opts);
+		ranges = torch::empty({num_tiles, 2}, int_opts);
+		cudaMemcpy(point_list.data_ptr(), point_list_ptr, rendered * sizeof(uint32_t), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(instance_mass.data_ptr(), instance_mass_ptr, rendered * sizeof(float), cudaMemcpyDeviceToDevice);
+		cudaMemcpy(ranges.data_ptr(), ranges_ptr, num_tiles * sizeof(uint2), cudaMemcpyDeviceToDevice);
+	  }
+  }
+  return std::make_tuple(rendered, out_color, radii, geomBuffer, binningBuffer, imgBuffer, out_invdepth, point_list, ranges, instance_mass);
+}
+
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
  RasterizeGaussiansBackwardCUDA(
  	const torch::Tensor& background,

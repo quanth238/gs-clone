@@ -1,0 +1,30 @@
+{
+  "budget": {
+    "n": 10000
+  },
+  "training": {
+    "iterations": 2000,
+    "batch_size": 1,
+    "log_interval": 50,
+    "save_interval": 500
+  },
+  "ot": {
+    "beta": 0.05,
+    "top_k": 32
+  },
+  "sinkhorn": {
+    "blur": 0.05,
+    "reach": 0.5,
+    "scaling": 0.9
+  },
+  "reg": {
+    "gamma": 0.001
+  },
+  "reseed": {
+    "interval": 250,
+    "count": 64,
+    "tile_candidates": 32,
+    "ema_decay": 0.9,
+    "jitter_xyz": 0.001
+  }
+}
